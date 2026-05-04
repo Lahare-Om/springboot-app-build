@@ -14,6 +14,7 @@ jobs:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     env:
+      APPS_REPOSITORY: ${{ vars.APPS_REPOSITORY || 'Lahare-Om/springboot-app' }}
       DEPLOY_BRANCH: deploy
 
     steps:
@@ -25,11 +26,29 @@ jobs:
       - name: Checkout apps repository
         uses: actions/checkout@v4
         with:
-          repository: ${{ vars.APPS_REPOSITORY }}
-          token: ${{ secrets.CROSS_REPO_TOKEN }}
+          repository: ${{ env.APPS_REPOSITORY }}
+          token: ${{ secrets.CROSS_REPO_TOKEN || github.token }}
           path: apps
           persist-credentials: true
           fetch-depth: 0
+
+      - name: Validate required secrets
+        env:
+          CROSS_REPO_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in CROSS_REPO_TOKEN DOCKER_USERNAME DOCKER_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error title=Missing secret::$name is required for this cross-repo build workflow."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
 
       - name: Set up Java
         uses: actions/setup-java@v4

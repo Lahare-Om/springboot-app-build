@@ -27,4 +27,6 @@ Set these in the `app-build` GitHub repository before enabling the workflow:
 - Secret `CROSS_REPO_TOKEN`: a token with permission to checkout and push to the app repo
 - Secrets `DOCKER_USERNAME` and `DOCKER_PASSWORD`
 
+For `CROSS_REPO_TOKEN`, use a GitHub token that can read and write `Lahare-Om/springboot-app` contents. The workflow needs this because it commits the updated Kubernetes image tag back to the app repo's `deploy` branch.
+
 The root workflow builds the Spring Boot image from the checked-out `app` repo and updates `k8s/base/deployment.yaml` on the `deploy` branch.

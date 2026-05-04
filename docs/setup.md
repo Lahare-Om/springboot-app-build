@@ -16,7 +16,7 @@ Clone the split repositories as siblings:
 ```text
 workspace/
 |- app-build/
-|- apps/
+|- app/
 `- argocd/
 ```
 

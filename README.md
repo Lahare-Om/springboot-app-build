@@ -15,7 +15,7 @@ The local scripts assume this layout on disk:
 ```text
 workspace/
 |- app-build/
-|- apps/
+|- app/
 `- argocd/
 ```
 
@@ -23,8 +23,8 @@ workspace/
 
 Set these in the `app-build` GitHub repository before enabling the workflow:
 
-- Repository variable `APPS_REPOSITORY`: the `owner/name` of the apps repo
-- Secret `CROSS_REPO_TOKEN`: a token with permission to checkout and push to the apps repo
+- Repository variable `APPS_REPOSITORY`: `Lahare-Om/springboot-app`
+- Secret `CROSS_REPO_TOKEN`: a token with permission to checkout and push to the app repo
 - Secrets `DOCKER_USERNAME` and `DOCKER_PASSWORD`
 
 The root workflow builds the Spring Boot image from the checked-out `app` repo and updates `k8s/base/deployment.yaml` on the `deploy` branch.

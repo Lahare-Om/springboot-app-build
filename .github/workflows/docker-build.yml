@@ -1,0 +1,104 @@
+name: Build Spring Boot Demo Image
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_BRANCH: deploy
+
+    steps:
+      - name: Checkout automation repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout apps repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.APPS_REPOSITORY }}
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+          path: apps
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+
+      - name: Capture app commit
+        working-directory: apps
+        run: echo "APP_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Build and test application
+        working-directory: apps
+        run: mvn clean verify
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build Docker image
+        run: docker build -t ${{ secrets.DOCKER_USERNAME }}/springboot-demo-app:${{ env.APP_SHA }} ./apps
+
+      - name: Push Docker image
+        run: docker push ${{ secrets.DOCKER_USERNAME }}/springboot-demo-app:${{ env.APP_SHA }}
+
+      - name: Prepare deployment worktree
+        working-directory: apps
+        run: |
+          set -euo pipefail
+          DEPLOY_DIR="$(mktemp -d)"
+          echo "DEPLOY_DIR=$DEPLOY_DIR" >> "$GITHUB_ENV"
+
+          git fetch origin main
+          git fetch origin "$DEPLOY_BRANCH" || true
+
+          if git show-ref --verify --quiet "refs/remotes/origin/$DEPLOY_BRANCH"; then
+            git worktree add -b "$DEPLOY_BRANCH" "$DEPLOY_DIR" "origin/$DEPLOY_BRANCH"
+            cd "$DEPLOY_DIR"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git merge --no-edit "${{ env.APP_SHA }}"
+          else
+            git worktree add -b "$DEPLOY_BRANCH" "$DEPLOY_DIR" "${{ env.APP_SHA }}"
+            cd "$DEPLOY_DIR"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          fi
+
+      - name: Update Kubernetes manifest image
+        working-directory: ${{ env.DEPLOY_DIR }}
+        run: |
+          sed -i "s|image: .*|image: ${{ secrets.DOCKER_USERNAME }}/springboot-demo-app:${{ env.APP_SHA }}|" k8s/base/deployment.yaml
+
+      - name: Commit updated manifest
+        working-directory: ${{ env.DEPLOY_DIR }}
+        run: |
+          git add k8s/base/deployment.yaml
+          git diff --cached --quiet || git commit -m "Update deployment image to ${{ env.APP_SHA }}"
+
+      - name: Push updated manifest
+        working-directory: ${{ env.DEPLOY_DIR }}
+        run: git push origin HEAD:$DEPLOY_BRANCH
+
+      - name: Cleanup deployment worktree
+        if: always()
+        working-directory: apps
+        run: |
+          if [ -n "${DEPLOY_DIR:-}" ]; then
+            git worktree remove --force "$DEPLOY_DIR" || true
+          fi
